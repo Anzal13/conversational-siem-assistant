@@ -11,12 +11,16 @@ const chartTooltip = {
 export default function ThreatAnalysis() {
   const attacks = getAttackDistribution();
   const [incidents] = useState(generateIncidents(100));
+  const [featuresInput, setFeaturesInput] = useState("");
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  // 🔥 NEW STATE (ML RESULT)
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   // Attack types bar chart data
   const barData = attacks.map((a) => ({ ...a, count: a.value * 3 + Math.floor(Math.random() * 20) }));
 
-  // Radar data for ML model performance
   const radarData = [
     { metric: 'Precision', rf: 94, if: 88 },
     { metric: 'Recall', rf: 91, if: 85 },
@@ -26,7 +30,6 @@ export default function ThreatAnalysis() {
     { metric: 'Speed', rf: 78, if: 95 },
   ];
 
-  // Scatter data: anomaly score vs RF confidence
   const scatterData = incidents.map((inc) => ({
     anomalyScore: inc.anomalyScore,
     rfConfidence: inc.rfConfidence,
@@ -41,11 +44,59 @@ export default function ThreatAnalysis() {
     }
   };
 
+  // 🔥 ML API CALL
+  const handlePredict = async () => {
+    setLoading(true);
+
+    try {
+      const features = Array(43).fill(1); // required 43 features
+
+      const res = await fetch("http://localhost:8000/predict", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ features }),
+      });
+
+      const data = await res.json();
+      setResult(data);
+
+    } catch (error) {
+      console.error(error);
+      alert("Error connecting to backend");
+    }
+
+    setLoading(false);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-glow-cyan">Threat Analysis</h1>
         <p className="text-sm text-muted-foreground">ML-powered threat classification and anomaly detection</p>
+      </div>
+      <textarea
+        placeholder="Enter 43 comma-separated values"
+        value={featuresInput}
+        onChange={(e) => setFeaturesInput(e.target.value)}
+        className="w-full p-2 rounded bg-black text-white"
+      />
+
+      {/* 🔥 ML BUTTON */}
+      <div className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
+        <button
+          onClick={handlePredict}
+          className="px-4 py-2 rounded-lg bg-primary text-white hover:opacity-80"
+        >
+          {loading ? "Running..." : "Run Threat Detection"}
+        </button>
+
+        {result && (
+          <div className="text-sm font-mono">
+            Result: <span className="text-green-400">{result.status}</span> | Severity: <span className="text-yellow-400">{result.severity}</span>
+          </div>
+        )}
       </div>
 
       {/* CSV Upload */}
@@ -65,7 +116,6 @@ export default function ThreatAnalysis() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Attack Types Bar */}
         <div className="bg-card rounded-lg border border-border p-4">
           <h3 className="text-sm font-semibold mb-4">Attack Types (Random Forest Classification)</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -83,7 +133,6 @@ export default function ThreatAnalysis() {
           </ResponsiveContainer>
         </div>
 
-        {/* ML Performance Radar */}
         <div className="bg-card rounded-lg border border-border p-4">
           <h3 className="text-sm font-semibold mb-4">ML Model Performance</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -100,17 +149,16 @@ export default function ThreatAnalysis() {
         </div>
       </div>
 
-      {/* Scatter: Anomaly vs Confidence */}
       <div className="bg-card rounded-lg border border-border p-4">
-        <h3 className="text-sm font-semibold mb-4">Anomaly Score vs RF Confidence (per incident)</h3>
+        <h3 className="text-sm font-semibold mb-4">Anomaly Score vs RF Confidence</h3>
         <ResponsiveContainer width="100%" height={300}>
           <ScatterChart>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,30%,18%)" />
-            <XAxis dataKey="anomalyScore" name="Anomaly Score" tick={{ fontSize: 10, fill: 'hsl(215,20%,55%)' }} />
-            <YAxis dataKey="rfConfidence" name="RF Confidence" tick={{ fontSize: 10, fill: 'hsl(215,20%,55%)' }} domain={[0.7, 1]} />
+            <XAxis dataKey="anomalyScore" />
+            <YAxis dataKey="rfConfidence" domain={[0.7, 1]} />
             <ZAxis range={[30, 30]} />
             <Tooltip {...chartTooltip} />
-            <Scatter name="Incidents" data={scatterData} fill="hsl(187,100%,50%)" fillOpacity={0.6} />
+            <Scatter data={scatterData} fill="hsl(187,100%,50%)" />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
